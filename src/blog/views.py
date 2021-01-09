@@ -1,7 +1,9 @@
-from django.http.response import HttpResponse
+# from django.http.response import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from .models import Post, Like
+from .models import Post, Like, PostView
 from .forms import CommentForm, PostForm
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 
 
 def post_list(request):
@@ -12,16 +14,18 @@ def post_list(request):
     return render(request, "blog/post_list.html", context)
 
 
+@login_required()
 def post_create(request):
     # form = PostForm(request.POST or None, request.FILES or None)
-    if request.method == "GET":
-        form = PostForm()
+
+    form = PostForm()
     if request.method == "POST":
         form = PostForm(request.POST, request.FILES)
         if form.is_valid():
             post = form.save(commit=False)
             post.author = request.user
             post.save()
+            messages.success(request, "Post created succesfully!")
             return redirect("blog:list")
     context = {
         'form': form
@@ -36,6 +40,8 @@ def post_detail(request, slug):
     # slug = learn-drf-3c78be2186
     form = CommentForm()
     obj = get_object_or_404(Post, slug=slug)
+    if request.user.is_authenticated:
+        PostView.objects.create(user=request.user, post=obj)
     if request.method == "POST":
         form = CommentForm(request.POST)
         if form.is_valid:
@@ -52,14 +58,16 @@ def post_detail(request, slug):
     return render(request, "blog/post_detail.html", context)
 
 
+@login_required()
 def post_update(request, slug):
     obj = get_object_or_404(Post, slug=slug)
     form = PostForm(request.POST or None, request.FILES or None, instance=obj)
     if request.user != obj.author:
-        # return HttpResponse("You're not authorized!!")
+        messages.warning(request, "You're not a writer of this post")
         return redirect('blog:list')
     if form.is_valid():
         form.save()
+        messages.success(request, "Post updated!!")
         return redirect("blog:list")
 
     context = {
@@ -69,14 +77,16 @@ def post_update(request, slug):
     return render(request, "blog/post_update.html", context)
 
 
+@login_required()
 def post_delete(request, slug):
     obj = get_object_or_404(Post, slug=slug)
 
     if request.user.id != obj.author.id:
-        # return HttpResponse("You're not authorized!!")
+        messages.warning(request, "You're not a writer of this post")
         return redirect('blog:list')
     if request.method == "POST":
         obj.delete()
+        messages.success(request, "Post deleted!!")
         return redirect("blog:list")
     context = {
         "object": obj
@@ -84,6 +94,7 @@ def post_delete(request, slug):
     return render(request, "blog/post_delete.html", context)
 
 
+@login_required()
 def like(request, slug):
     if request.method == "POST":
         obj = get_object_or_404(Post, slug=slug)
@@ -93,3 +104,4 @@ def like(request, slug):
         else:
             Like.objects.create(user=request.user, post=obj)
         return redirect('blog:detail', slug=slug)
+    return redirect('blog:detail', slug=slug)
